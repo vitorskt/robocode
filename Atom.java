@@ -1,95 +1,106 @@
 package Roboxer;
 import robocode.*;
-import robocode.util.Utils ;
-//import java.awt.Color;
+import java.awt.Color;
+import static robocode.util.Utils.normalRelativeAngleDegrees;
+import robocode.util.*;
 
-// API help : https://robocode.sourceforge.io/docs/robocode/robocode/Robot.html
+public class Atom extends RateControlRobot {
+    /**
+     * run: executado quando o round for iniciado
+     */
+    public void run() {
+        setColors(Color.red, Color.black, Color.red); //cor do robo
+        // Definindo posição inicial e direção do robo
+        setAdjustGunForRobotTurn(true);
+        setAdjustRadarForGunTurn(true);
+        setAdjustRadarForRobotTurn(true);
 
-/**
- * Atom - a robot by (Joao Victor)
- */
-public class Atom extends AdvancedRobot
-{
-	/**
-	 * run: Atom's default behavior
-	 */
-	public void run() {
-		// setColors(Color.red,Color.blue,Color.green); // body,gun,radar
-		
-		setAdjustRadarForGunTurn(true);
-		setAdjustRadarForRobotTurn(true);
-		setTurnGunRight(Double.POSITIVE_INFINITY);
-		int counter = 0;
+        // Dando vida ao robo em um loop infinito
+        while (true) {
+            setVelocityRate(5);
+            setTurnRateRadians(0);
+            execute();
+            turnRadarRight(360);
+        }
+    }
+    /**
+     * onScannedRobot: Executado quando o radar encontra um robo.
+     */
+    public void onScannedRobot(ScannedRobotEvent e) {
+        double forcaTiro = Math.min(2.0, getEnergy());
+        double distancia = getHeadingRadians() + e.getBearingRadians();
+        double posX = getX() + e.getDistance() * Math.sin(distancia);
+        double posY = getY() + e.getDistance() * Math.cos(distancia);
+        double posDoInimigo = e.getHeadingRadians();
+        double veloDoInimigo = e.getVelocity();
+        double alturaDaArena = getBattleFieldHeight(), larguraDaArena = getBattleFieldWidth();
+        double prevX = posX, prevY = posY;
+        
+        prevX += Math.sin(posDoInimigo) * veloDoInimigo;
+        prevY += Math.cos(posDoInimigo) * veloDoInimigo;
+        if (prevX < 18.0 || prevY < 18.0 || prevX > larguraDaArena - 18.0 || prevY > alturaDaArena - 18.0) {
+            prevX = Math.min(Math.max(18.0, prevX), larguraDaArena - 18.0);
+            prevY = Math.min(Math.max(18.0, prevY), alturaDaArena - 18.0);
+        }
+        
+        double anguloAbs = Utils.normalAbsoluteAngle(
+            Math.atan2(
+                prevX - getX(), prevY - getY()
+            )
+        );
+        
+        setTurnRightRadians(distancia / 2 * - 1 - getRadarHeadingRadians());
+        setTurnRadarRightRadians(Utils.normalRelativeAngle(distancia - getRadarHeadingRadians()));
+        setTurnGunRightRadians(Utils.normalRelativeAngle(anguloAbs - getGunHeadingRadians()));
+        fire(forcaTiro);
+        
+        if (getVelocityRate() > 0){
+            setVelocityRate(getVelocityRate() + 1);
+        } 
+        else {
+            setVelocityRate(- 1);
+        }
 
-		while(true) {
-			if (getRadarTurnRemaining() == 0.0) {
-				setTurnRadarRightRadians(Double.POSITIVE_INFINITY);
-			}
-			if (counter < 16){
-				setAhead(100);
-			} else{
-				setBack(100);
-				counter = (counter + 1) % 32;
-				execute();
-			}
-		}
-	}
-
-	/**
-	 * onScannedRobot: What to do when you see another robot
-	 */
-	public void onScannedRobot(ScannedRobotEvent e) {
-		// Replace the next line with any behavior you would like
-		double angleToEnemy = getHeadingRadians() + e.getBearingRadians();
-		double turnToEnemy = Utils.normalRelativeAngle(angleToEnemy - getRadarHeadingRadians());
-		double extraTurn = Math.atan(36.0 / e.getDistance()) * (turnToEnemy >= 0 ? 1 : -1);		
-		
-		setTurnRadarRightRadians(turnToEnemy + extraTurn);
-		setTurnRight(e.getBearing() + 90);
-		//setTurnRadarLeftRadians(getRadarTurnRemainingRadians());
-		shoot(e);
-	}
-	
-	public void shoot(ScannedRobotEvent e) {
-		double absoluteBearing = e.getBearingRadians() + getHeadingRadians();
-		double gunTurn = absoluteBearing - getGunHeadingRadians();
-		double firePower = decideFirePower(e);
-		double future = e.getVelocity() * Math.sin(e.getHeadingRadians() - absoluteBearing) / Rules.getBulletSpeed(firePower);
-		setTurnGunRightRadians(Utils.normalRelativeAngle(gunTurn + future));
-		setFire(firePower);
-
-	}
-	
-	public double decideFirePower(ScannedRobotEvent e){
-		double firePower = getOthers() == 1 ? 2.0 : 3.0;
-		
-		if (e.getDistance() > 400) {
-			firePower = 1.0;
-		} else if (e.getDistance() < 200) {
-			firePower = 3.0;
-		}
-		
-		if (getEnergy() < 1) {
-			firePower = 0.1;
-		} else if (getEnergy() < 10) {
-			firePower = 1.0;
-		}
-		return Math.min(e.getEnergy() / 4, firePower);
-	}
-
-	/**
-	 * onHitByBullet: What to do when you're hit by a bullet
-	 */
-	public void onHitByBullet(HitByBulletEvent e) {
-		// Replace the next line with any behavior you would like
-		back(10);
-	}
-	
-	/**
-	 * onHitWall: What to do when you hit a wall
-	 */
-	public void onHitWall(HitWallEvent e) {
-		// Replace the next line with any behavior you would like
-		back(20);
-	}	
+        if (getVelocityRate() > 0 && ((getTurnRate() < 0 && distancia > 0) || (getTurnRate() > 0 && distancia < 0))) {
+            setTurnRate(getTurnRate() * -1);
+        }
+    }
+    /**
+     * onHitByBullet: É executado quando o robô leva um tiro.
+     */
+    public void onHitByBullet(HitByBulletEvent e) {
+        double Radar = normalRelativeAngleDegrees(e.getBearing() + getHeading() - getRadarHeading());
+        setTurnRadarRight(Radar);
+        setTurnLeft(-3);
+        setTurnRate(3);
+        setVelocityRate(-1 * getVelocityRate());
+    }
+    /**
+     * onHitWall: É executado quando o robô colide com a parede.
+     */
+    public void onHitWall(HitWallEvent e) {
+        setVelocityRate(-1 * getVelocityRate());
+        setTurnRate(getTurnRate() + 2);
+        execute();
+    }
+    /**
+     * onHitRobot: É executado quando o robô bate em outro robô.
+     */
+    public void onHitRobot(HitRobotEvent e) {
+        double Canhao = normalRelativeAngleDegrees(e.getBearing() + getHeading() - getGunHeading());
+        turnGunRight(Canhao);
+        setFire(3);
+        setVelocityRate(getVelocity() + 3);
+        execute();
+    }
+    /**
+     * onWin: É executado quando o robô ganha o round.
+     */
+    public void onWin(WinEvent e) {
+        int win = 1;
+        while (true) {
+            turnRight(90 * win);
+            win = win * -1;
+        }
+    }
 }
